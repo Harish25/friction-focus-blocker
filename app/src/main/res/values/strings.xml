@@ -1,0 +1,11 @@
+<resources>
+    <plurals name="countdown_seconds">
+        <item quantity="one">%1$d second remaining</item>
+        <item quantity="other">%1$d seconds remaining</item>
+    </plurals>
+    <string name="photo_position">%1$d / %2$d</string>
+    <string name="exit_home">Exit to Home</string>
+    <string name="turn_off">Turn off Friction…</string>
+    <string name="recovery_settings">Accessibility settings</string>
+    <string name="accessibility_description">Friction observes foreground package names and shows a focus countdown. It does not read or store screen text. Home, calling, Settings and uninstall remain available. Single-window enforcement only; physical-device validation is still pending.</string>
+</resources>
