@@ -50,8 +50,8 @@ class PersistenceAndMediaTest {
         assertNull(loadOrFallback<String>("bad image") { throw IllegalArgumentException("decode failed") })
         assertEquals("image", loadOrFallback("content://valid") { "image" })
     }
-    @Test fun spikeMigrationRetainsOnAndPendingButUsesUsableDefaults() {
-        val state = migrateLegacySpike(true, "a", 10_000, 6_871, 0, 100_000, emptySet())
+    @Test fun legacyMigrationRetainsOnAndPendingButUsesUsableDefaults() {
+        val state = migrateLegacyPreferences(true, "a", 10_000, 6_871, 0, 100_000, emptySet())
         assertTrue(state.on)
         assertEquals(6_871, state.usage["a"]!!.remaining)
         assertEquals(10_000, state.usage["a"]!!.used)
@@ -60,9 +60,9 @@ class PersistenceAndMediaTest {
         assertEquals(30_000, state.interventionMs)
         assertEquals(0, state.usage["a"]!!.daily)
         assertEquals(100_000, state.usage["a"]!!.away!!.wall)
-        val excluded = migrateLegacySpike(true, "phone", 10_000, 1_000, 0, 0, setOf("phone"))
+        val excluded = migrateLegacyPreferences(true, "phone", 10_000, 1_000, 0, 0, setOf("phone"))
         assertTrue(excluded.on); assertTrue(excluded.rules.isEmpty())
-        val off = migrateLegacySpike(false, "a", 10_000, 1_000, 0, 0, emptySet())
+        val off = migrateLegacyPreferences(false, "a", 10_000, 1_000, 0, 0, emptySet())
         assertEquals(0, off.usage["a"]!!.remaining)
     }
     @Test fun mediaCancellationIsPropagated() = runBlocking<Unit> {

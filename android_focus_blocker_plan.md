@@ -176,6 +176,7 @@ Ordinary intervention screen:
 You've used Instagram for 10 minutes.
 00:24 remaining
 [Exit Instagram]
+[Return for 1 minute]
 ```
 
 Behavior:
@@ -184,7 +185,10 @@ Behavior:
 - Back and outside taps must not dismiss an ordinary usage intervention.
 - Home remains available.
 - Exit returns to Home; it does not promise to terminate the other app.
-- No normal Skip button.
+- Offer **Return for 1 minute** once per app session on ordinary, daily-limit and blocked-app screens. This dismisses the overlay for 60 continuous seconds to finish content or change settings inside the target app.
+- Keep an unfinished ordinary countdown paused during that minute. At expiry, reset it to the full configured pause duration and restore the applicable focus screen without the return button. Background time, locking, reopening and process restart do not extend or renew the minute. Reboot ends an active minute conservatively.
+- Persist the used flag and start timestamp. Renew the option only when the app session resets through the configured continuous absence or turning Friction off and on. Track absence for Blocked apps too; daily totals remain independent.
+- Count observed foreground wrap-up use toward Interrupted apps' daily totals, including use beyond a reached daily limit. The temporary minute is the only exception to that limit.
 - After the countdown completes, the app may resume unless another restriction, such as its daily cap, applies.
 - If photos are absent, deleted, or inaccessible, show a simple text fallback with the same countdown.
 
@@ -312,11 +316,11 @@ Keep configuration, usage, photos, and future location/NFC data on-device.
 
 ## 17. Implementation Sequence
 
-### A. Technical spike on the target phone
+### A. Device integration on the target phone
 
 Prove foreground-package detection, a short usage threshold, a countdown overlay that blocks underlying interaction, Exit-to-Home, and continued Home/system recovery access. Validate lock/unlock and service restart behavior.
 
-NFC is not required for this initial spike.
+NFC is not required for this integration.
 
 ### B. Manual focus foundation
 
@@ -380,4 +384,4 @@ Not part of the current design:
 - preventing uninstall
 - cloud sync, web dashboard, social features, or ML
 
-Remaining implementation decisions are primarily technical: minimum Android version, exact persistence/API choices, essential-app exclusions, multi-window/PiP support, clock-change handling, and measured reliability on the target phone. Resolve these with the prototype and targeted validation rather than expanding the product model.
+Remaining implementation decisions are primarily technical: minimum Android version, exact persistence/API choices, essential-app exclusions, multi-window/PiP support, clock-change handling, and measured reliability on the target phone. Resolve these with the app and targeted validation rather than expanding the product model.

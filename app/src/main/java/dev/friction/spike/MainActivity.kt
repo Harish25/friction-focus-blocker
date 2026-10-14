@@ -119,7 +119,7 @@ class MainActivity : ComponentActivity() {
                                 val selected = uris.map { it.toString() }
                                 repo.settings(state.interventionMs, state.resetMs, selected)
                                 releasePhotos(old - selected.toSet())
-                                photoMessage = if (missingGrant) "Some photos may need reselecting after restart. Text fallback remains available." else "Photos selected."
+                                photoMessage = if (missingGrant) "Some photos may need reselecting after restart. You’ll still see a reminder." else "Photos selected."
                             }
                         }
                         LazyColumn(Modifier.safeDrawingPadding().padding(horizontal = 20.dp),
@@ -128,28 +128,26 @@ class MainActivity : ComponentActivity() {
                                 Spacer(Modifier.height(12.dp))
                                 Text("Friction", style = MaterialTheme.typography.headlineLarge)
                                 Text("Focus state: ${if (state.on) "ON" else "OFF"}", style = MaterialTheme.typography.titleLarge)
-                                Text("Saved state: ${repo.savedOn.value?.let { if (it) "ON" else "OFF" } ?: "not yet saved"}")
-                                Text(if (FocusService.connected.value) "Accessibility service connected" else "Enforcement unavailable: accessibility service disconnected")
-                                Text(FocusService.observed.value)
+                                Text(if (FocusService.connected.value) "Accessibility service connected" else "Enable Accessibility to use focus pauses and app blocking")
                                 if (FocusService.problem.value.isNotBlank()) Text(FocusService.problem.value)
                                 if (repo.error.value.isNotBlank()) Text(repo.error.value)
                             }
                             item {
                                 if (state.on) Button(onClick = { off.begin(state.photos) }) { Text("Turn off Friction…") }
                                 else Button(onClick = { repo.activate() }) { Text("Turn on Friction") }
-                                Text("Single-window use only. Split-screen, PiP, system surfaces and unknown windows pause enforcement. Phone hardening tests remain pending.")
+                                Text("Use apps full screen. Restrictions pause in split-screen, picture-in-picture and Android system screens.")
                             }
                             item {
-                                Text("Setup & recovery", style = MaterialTheme.typography.titleMedium)
-                                Text("Friction uses Accessibility to observe foreground package names and block selected apps. It does not read screen text. Home, calling, Settings and uninstall remain accessible.")
+                                Text("Setup", style = MaterialTheme.typography.titleMedium)
+                                Text("Enable Accessibility so Friction can identify the app you are using and show focus pauses. Your screen text stays private. Home, calling and Android Settings stay available.")
                                 OutlinedButton(onClick = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }) { Text("Accessibility settings") }
                             }
                             item {
                                 Text("Focus settings", style = MaterialTheme.typography.titleMedium)
-                                Text("Ordinary pause: ${state.interventionMs / 1000}s · Session reset: ${state.resetMs / 1000}s away")
-                                Text("Manual turn-off always requires 30 visible seconds and confirmation.")
+                                Text("Pause length: ${state.interventionMs / 1000}s · Session reset: ${state.resetMs / 1000}s away")
+                                Text("To turn Friction off, take a 30-second pause, then confirm.")
                                 OutlinedButton(enabled = !state.on, onClick = { globalEdit = true }) { Text("Edit timing") }
-                                Text("Motivation photos: ${state.photos.size}. Missing photos use a text fallback.")
+                                Text("Motivation photos: ${state.photos.size}. If a photo is unavailable, you’ll see a reminder instead.")
                                 OutlinedButton(enabled = !state.on, onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) { Text("Choose / replace photos") }
                                 if (state.photos.isNotEmpty()) TextButton(enabled = !state.on, onClick = {
                                     val old = state.photos
@@ -160,7 +158,7 @@ class MainActivity : ComponentActivity() {
                             }
                             item {
                                 Text("Apps", style = MaterialTheme.typography.titleLarge)
-                                Text("Interrupted and Blocked apps appear first. Allowed apps follow below. Recovery and calling apps are excluded.")
+                                Text("Interrupted and Blocked apps appear first. Allowed apps follow below. Home, calling and Android Settings stay available.")
                                 OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text("Find an app") }, modifier = Modifier.fillMaxWidth())
                             }
                             val configuredMissing = state.rules.keys.filter { p -> apps.none { it.second == p } }
@@ -176,7 +174,6 @@ class MainActivity : ComponentActivity() {
                                     OutlinedCard(Modifier.fillMaxWidth()) {
                                         Column(Modifier.padding(12.dp)) {
                                             Text(app.first, style = MaterialTheme.typography.titleMedium)
-                                            Text(app.second, style = MaterialTheme.typography.bodySmall)
                                             Text(rule.policy.name)
                                             if (rule.policy == Policy.Interrupted) {
                                                 Text("Initial ${rule.initialMs / 1000}s · Repeat ${rule.repeatMs / 1000}s · Cap ${rule.capMs?.let { "${it / 1000}s" } ?: "off"}")
@@ -319,7 +316,7 @@ private fun milliseconds(text: String, maxSeconds: Long = 86_400): Long? =
     var reset by remember { mutableStateOf((resetInitial / 1000).toString()) }
     AlertDialog(onDismissRequest = dismiss, title = { Text("Timing") }, text = {
         Column {
-            SecondsField("Ordinary pause (1–3600 seconds)", duration) { duration = it }
+            SecondsField("Pause length (1–3600 seconds)", duration) { duration = it }
             SecondsField("Session reset (1–86400 seconds away)", reset) { reset = it }
             Text("Defaults: 30 seconds pause, 1500 seconds (25 minutes) away. Manual turn-off remains 30 seconds.")
         }

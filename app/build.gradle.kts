@@ -5,14 +5,15 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 android {
+    // Retain the installed app and accessibility component identity for in-place upgrades.
     namespace = "dev.friction.spike"
     compileSdk = 36
     defaultConfig {
         applicationId = "dev.friction.spike"
         minSdk = 33
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.2.4-manual-debug"
+        versionCode = 8
+        versionName = "0.2.6"
     }
     buildFeatures { compose = true }
     compileOptions {
