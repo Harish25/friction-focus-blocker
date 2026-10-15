@@ -25,6 +25,7 @@ class InterventionView(
     exit: () -> Unit,
     deactivate: () -> Unit,
     recovery: () -> Unit,
+    wrapUp: (() -> Unit)? = null,
 ) : ScrollView(context) {
     private val ink = FrictionColors.onSurface.toArgb()
     private val primary = FrictionColors.primary.toArgb()
@@ -114,6 +115,10 @@ class InterventionView(
         timerCard.addView(progress, LinearLayout.LayoutParams(-1, dp(4)).apply { topMargin = dp(12) })
         space(16)
         body.addView(action(context.getString(R.string.exit_home), primary, FrictionColors.onPrimary.toArgb(), exit), LinearLayout.LayoutParams(-1, -2))
+        if (wrapUp != null) {
+            space(10)
+            body.addView(action(context.getString(R.string.return_one_minute), surface, primary, wrapUp, outlined = true), LinearLayout.LayoutParams(-1, -2))
+        }
         space(10)
         body.addView(action(context.getString(R.string.turn_off), surface, primary, deactivate, outlined = true), LinearLayout.LayoutParams(-1, -2))
         space(6)

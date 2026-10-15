@@ -199,4 +199,138 @@ class FocusEngineTest {
         a.tick(20_000, true); assertEquals(29_000, a.remaining)
         assertEquals(30_000, DeactivationAttempt().remaining)
     }
+
+    @Test fun wrapUpLastsExactlyOneMinuteAndRestartsFullConfiguredPause() {
+        val e = engine(); val c = Clock(start)
+        e.state.interventionMs = 60_000
+        use(e, c, 3_000); use(e, c, 700, overlay = true)
+        assertEquals(59_300, e.state.usage["a"]!!.remaining)
+        assertTrue(e.canWrapUp("a")); assertTrue(e.startWrapUp("a", c.now()))
+        assertFalse(e.startWrapUp("a", c.now()))
+        use(e, c, 59_900)
+        assertEquals(Barrier.None, e.barrier("a"))
+        use(e, c, 100)
+        assertEquals(Barrier.Ordinary, e.barrier("a"))
+        assertFalse(e.canWrapUp("a"))
+        assertEquals(60_000, e.state.usage["a"]!!.remaining)
+        assertEquals(63_000, e.state.usage["a"]!!.daily)
+        use(e, c, 60_000, overlay = true); use(e, c, 2_000)
+        assertEquals(Barrier.Ordinary, e.barrier("a"))
+        assertFalse(e.canWrapUp("a"))
+    }
+
+    @Test fun wrapUpAppliesToBlockedAppsAndTimeAwayDoesNotExtendIt() {
+        val e = engine(); val c = Clock(start)
+        e.deactivate(); e.configure("b", AppRule(Policy.Blocked)); e.activate()
+        e.state.resetMs = 120_000
+        assertTrue(e.startWrapUp("b", c.now()))
+        use(e, c, 30_000, "b"); use(e, c, 29_900, null)
+        assertEquals(Barrier.None, e.barrier("b"))
+        use(e, c, 100, null)
+        assertEquals(Barrier.Blocked, e.barrier("b"))
+        use(e, c, 100, "b")
+        assertFalse(e.canWrapUp("b"))
+        use(e, c, 120_000, null)
+        assertTrue(e.canWrapUp("b"))
+    }
+
+    @Test fun wrapUpCanTemporarilyLiftDailyCapButNeverRenewsOnReopening() {
+        val e = engine(3_000); val c = Clock(start)
+        e.state.resetMs = 120_000
+        use(e, c, 3_000)
+        assertTrue(e.startWrapUp("a", c.now()))
+        use(e, c, 10_000); use(e, c, 10_000, null); use(e, c, 40_000)
+        assertEquals(Barrier.DailyCap, e.barrier("a"))
+        assertEquals(53_000, e.state.usage["a"]!!.daily)
+        assertFalse(e.canWrapUp("a"))
+        assertEquals(2_000, e.state.usage["a"]!!.remaining)
+    }
+
+    @Test fun wrapUpIsIndependentPerAppAndCannotBeGrantedWithoutABarrier() {
+        val e = engine(); val c = Clock(start)
+        assertFalse(e.startWrapUp("a", c.now()))
+        assertFalse(e.startWrapUp("unknown", c.now()))
+        e.deactivate(); e.configure("b", AppRule(Policy.Blocked)); e.activate()
+        use(e, c, 3_000)
+        assertTrue(e.startWrapUp("a", c.now()))
+        assertTrue(e.canWrapUp("b")); assertTrue(e.startWrapUp("b", c.now()))
+    }
+
+    @Test fun wrapUpSurvivesRestartWithoutRenewalAndExpiresOnReboot() {
+        val e = engine(); val c = Clock(start)
+        e.state.resetMs = 120_000
+        use(e, c, 3_000); use(e, c, 700, overlay = true)
+        assertTrue(e.startWrapUp("a", c.now()))
+        use(e, c, 10_000)
+        val restored = FocusEngine(FocusCodec.decode(FocusCodec.encode(e.state)))
+        c.step(20_000); restored.recover(c.now(), utc)
+        assertEquals(Barrier.None, restored.barrier("a"))
+        assertEquals(1_300, restored.state.usage["a"]!!.remaining)
+        assertFalse(restored.canWrapUp("a"))
+        use(restored, c, 30_000)
+        assertEquals(Barrier.Ordinary, restored.barrier("a"))
+        assertEquals(2_000, restored.state.usage["a"]!!.remaining)
+        assertFalse(restored.canWrapUp("a"))
+
+        val rebooted = FocusEngine(FocusCodec.decode(FocusCodec.encode(e.state)))
+        c.boot++; c.elapsed = 100
+        rebooted.recover(c.now(), utc)
+        assertEquals(Barrier.Ordinary, rebooted.barrier("a"))
+        assertEquals(2_000, rebooted.state.usage["a"]!!.remaining)
+        assertFalse(rebooted.canWrapUp("a"))
+    }
+
+    @Test fun wrapUpResetsWithSessionAndChargesOnlyBeforeDeadlineAcrossAStall() {
+        val e = engine(); val c = Clock(start)
+        e.state.resetMs = 120_000
+        use(e, c, 3_000); assertTrue(e.startWrapUp("a", c.now()))
+        use(e, c, 59_900)
+        c.step(500); e.observe("a", false, c.now(), utc)
+        assertEquals(63_000, e.state.usage["a"]!!.daily)
+        assertEquals(Barrier.Ordinary, e.barrier("a"))
+        e.deactivate(); e.activate(); use(e, c, 3_000)
+        assertTrue(e.canWrapUp("a"))
+    }
+
+    @Test fun wrapUpSplitsDailyUseAtMidnightWithoutRenewingTheOption() {
+        val e = engine(); val c = Clock(Instant.parse("2026-09-27T23:59:56.500Z").toEpochMilli())
+        use(e, c, 3_000); assertTrue(e.startWrapUp("a", c.now()))
+        use(e, c, 1_000)
+        assertEquals(500, e.state.usage["a"]!!.daily)
+        assertEquals("2026-09-28", e.state.usage["a"]!!.day)
+        assertFalse(e.canWrapUp("a"))
+        assertEquals(2_000, e.state.usage["a"]!!.remaining)
+    }
+
+    @Test fun existingSavedUsageGetsAnUnusedWrapUpOption() {
+        val state = FocusCodec.decode("""{"on":true,"rules":{"a":{"policy":"Interrupted"}},
+            "usage":{"a":{"used":600000,"remaining":30000}}}""")
+        val e = FocusEngine(state)
+        assertTrue(e.canWrapUp("a"))
+        assertNull(state.usage["a"]!!.wrapUpStarted)
+    }
+
+    @Test fun wrapUpStillExpiresWhenBootIdentityIsUnavailable() {
+        val e = engine(); val c = Clock(start, boot = -1)
+        use(e, c, 3_000); assertTrue(e.startWrapUp("a", c.now()))
+        use(e, c, 59_900); assertEquals(Barrier.None, e.barrier("a"))
+        use(e, c, 100); assertEquals(Barrier.Ordinary, e.barrier("a"))
+        assertFalse(e.canWrapUp("a"))
+    }
+
+    @Test fun wrapUpExpiryWhileAwayRestartsPauseWithoutHiddenCountdownCredit() {
+        val e = engine(); val c = Clock(start)
+        e.state.interventionMs = 60_000
+        e.state.resetMs = 120_000
+        use(e, c, 3_000); use(e, c, 20_000, overlay = true)
+        assertEquals(40_000, e.state.usage["a"]!!.remaining)
+        assertTrue(e.startWrapUp("a", c.now()))
+        use(e, c, 60_000, null)
+        assertEquals(60_000, e.state.usage["a"]!!.remaining)
+        use(e, c, 500)
+        assertEquals(60_000, e.state.usage["a"]!!.remaining)
+        use(e, c, 500, overlay = true)
+        assertEquals(59_500, e.state.usage["a"]!!.remaining)
+        assertFalse(e.canWrapUp("a"))
+    }
 }

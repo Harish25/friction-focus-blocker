@@ -18,6 +18,7 @@ internal object FocusCodec {
         }
         state.usage.values.forEach {
             require(it.used >= 0 && it.next >= 0 && it.daily >= 0 && it.remaining in 0..3_600_000)
+            require(it.wrapUpStarted == null || (it.wrapUpUsed && it.wrapUpStarted!!.elapsed >= 0))
         }
     }
 }
@@ -28,7 +29,7 @@ internal object FocusSerializer : Serializer<FocusState> {
     override suspend fun writeTo(t: FocusState, output: OutputStream) { output.write(FocusCodec.encode(t).encodeToByteArray()) }
 }
 
-internal fun migrateLegacySpike(on: Boolean, target: String, used: Long, remaining: Long,
+internal fun migrateLegacyPreferences(on: Boolean, target: String, used: Long, remaining: Long,
     away: Long, checkpoint: Long, excluded: Set<String>): FocusState = FocusState(on = on).apply {
     if (target.isNotBlank() && target !in excluded) {
         rules[target] = AppRule(Policy.Interrupted)

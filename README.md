@@ -43,13 +43,19 @@ Under **Edit timing**, you can change how long a pause lasts and how long you ne
 
 Timing fields use seconds: for example, enter `600` for 10 minutes or `1500` for 25 minutes.
 
+## Wrap up before leaving an app
+
+On a pause or blocking screen, tap **Return for 1 minute** to finish the content you were viewing or change settings inside that app. The focus screen returns after 60 seconds, even if you leave the app or lock your phone during that minute. When the minute expires, an unfinished pause restarts at its full configured duration.
+
+This option is available once per app session. It does not reappear on the next focus screen, after reopening the app, or after restarting Friction. A new session begins after the configured time away or after turning Friction off and on. The minute also counts toward daily use for Interrupted apps, including when their daily limit has been reached.
+
 ## Turn off Friction or change settings
 
 Tap **Turn off Friction…**, keep the confirmation screen visible for 30 seconds, then confirm. Tap **Keep focusing** to cancel.
 
 Once Friction is off, you can edit app policies, timing, and photos. Turning it off resets app sessions but preserves daily usage totals.
 
-From a blocking screen, **Exit** takes you to your home screen. **Turn off Friction** opens the same confirmation flow.
+From a focus screen, **Exit to Home** takes you to your home screen. **Turn off Friction** opens the same confirmation flow.
 
 ## Troubleshooting
 

@@ -90,6 +90,13 @@ class FocusService : AccessibilityService() {
             },
             deactivate = { openScreen(Intent(this, MainActivity::class.java).putExtra("deactivate", true)) },
             recovery = { openScreen(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
+            wrapUp = if (repo.engine?.canWrapUp(pkg) == true) ({
+                if (repo.engine?.startWrapUp(pkg, repo.now()) == true) {
+                    repo.checkpoint(true)
+                    removeOverlay()
+                    reconcile()
+                }
+            }) else null,
         )
         val params = WindowManager.LayoutParams(-1, -1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.OPAQUE)

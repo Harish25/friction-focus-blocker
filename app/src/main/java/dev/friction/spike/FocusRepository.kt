@@ -32,7 +32,7 @@ class FocusRepository private constructor(private val context: Application) {
             try {
                 val exists = withContext(Dispatchers.IO) { file.exists() }
                 val loaded = dataStore.data.first()
-                val state = if (exists) FocusCodec.decode(FocusCodec.encode(loaded)) else migrateSpike()
+                val state = if (exists) FocusCodec.decode(FocusCodec.encode(loaded)) else migrateLegacyPreferences()
                 savedOn.value = state.on
                 engine = FocusEngine(state, excluded).also { it.recover(now(), ZoneId.systemDefault()) }
                 ready.value = true
@@ -61,9 +61,10 @@ class FocusRepository private constructor(private val context: Application) {
             }
         }
     }
-    private suspend fun migrateSpike(): FocusState = withContext(Dispatchers.IO) {
+    private suspend fun migrateLegacyPreferences(): FocusState = withContext(Dispatchers.IO) {
+        // Historical storage key: changing it would abandon existing users' preferences.
         val prefs = context.getSharedPreferences("spike", Context.MODE_PRIVATE)
-        migrateLegacySpike(
+        migrateLegacyPreferences(
             prefs.getBoolean("armed", false), prefs.getString("target", "").orEmpty(),
             prefs.getLong("used", 0), prefs.getLong("remaining", 0),
             prefs.getLong("away", 0), prefs.getLong("checkpoint", 0), excluded,

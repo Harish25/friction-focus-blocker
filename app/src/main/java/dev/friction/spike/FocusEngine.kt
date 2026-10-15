@@ -15,6 +15,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class AppUsage(
     var used: Long = 0, var next: Long = 0, var remaining: Long = 0,
     var away: Stamp? = null, var daily: Long = 0, var day: String = "",
+    var wrapUpUsed: Boolean = false, var wrapUpStarted: Stamp? = null,
 )
 @Serializable data class FocusState(
     val schema: Int = 1,
@@ -55,6 +56,7 @@ class FocusEngine(val state: FocusState, private val excluded: Set<String> = emp
     private fun clearSessions() = state.usage.values.forEach { clearSession(it, 0) }
     private fun clearSession(u: AppUsage, initial: Long) {
         u.used = 0; u.next = initial; u.remaining = 0; u.away = null
+        u.wrapUpUsed = false; u.wrapUpStarted = null
     }
     fun forgetObservation() { previous = null; previousPackage = null; previousOverlay = false }
     fun recover(now: Stamp, zone: ZoneId) {
@@ -62,6 +64,8 @@ class FocusEngine(val state: FocusState, private val excluded: Set<String> = emp
             rollover(u, date(now.wall, zone))
             if (state.on && u.away == null) u.away = state.checkpoint ?: now
             reconcileAbsence(u, state.rules[pkg]?.initialMs ?: 0, now)
+            if (u.wrapUpStarted?.boot == -1) finishWrapUp(u)
+            expireWrapUp(u, now)
         }
         forgetObservation()
         state.checkpoint = now
@@ -69,11 +73,34 @@ class FocusEngine(val state: FocusState, private val excluded: Set<String> = emp
     fun barrier(pkg: String?): Barrier {
         if (!state.on || pkg == null || pkg in excluded) return Barrier.None
         val rule = state.rules[pkg] ?: return Barrier.None
+        if (state.usage[pkg]?.wrapUpStarted != null) return Barrier.None
         if (rule.policy == Policy.Blocked) return Barrier.Blocked
         if (rule.policy != Policy.Interrupted) return Barrier.None
         val u = state.usage[pkg] ?: return Barrier.None
         if (rule.capMs != null && u.daily >= rule.capMs) return Barrier.DailyCap
         return if (u.remaining > 0) Barrier.Ordinary else Barrier.None
+    }
+    fun canWrapUp(pkg: String): Boolean = barrier(pkg) != Barrier.None &&
+        state.usage[pkg]?.wrapUpUsed != true
+
+    /** One continuous minute per app session, including time spent away or with the screen locked. */
+    fun startWrapUp(pkg: String, now: Stamp): Boolean {
+        if (!canWrapUp(pkg)) return false
+        val u = state.usage.getOrPut(pkg) { AppUsage() }
+        u.wrapUpUsed = true
+        u.wrapUpStarted = now
+        forgetObservation()
+        return true
+    }
+    private fun expireWrapUp(u: AppUsage, now: Stamp) {
+        val started = u.wrapUpStarted ?: return
+        if (started.boot != now.boot || now.elapsed < started.elapsed ||
+            now.elapsed - started.elapsed >= 60_000) finishWrapUp(u)
+    }
+    private fun finishWrapUp(u: AppUsage) {
+        u.wrapUpStarted = null
+        // Returning after wrap-up starts a full pause, without renewing the one-time option.
+        if (u.remaining > 0) u.remaining = state.interventionMs
     }
     fun observe(pkg: String?, overlayVisible: Boolean, now: Stamp, zone: ZoneId, ordinaryVisible: Boolean = overlayVisible) {
         val target = pkg?.takeIf { it !in excluded && state.on }
@@ -82,7 +109,7 @@ class FocusEngine(val state: FocusState, private val excluded: Set<String> = emp
             target == previousPackage && overlayVisible == previousOverlay && ordinaryVisible == previousOrdinary)
             (now.elapsed - old.elapsed).takeIf { it in 0..1_000 } ?: 0 else 0
         state.rules.forEach { (p, rule) ->
-            if (rule.policy != Policy.Interrupted) return@forEach
+            if (rule.policy == Policy.Allowed) return@forEach
             val u = state.usage.getOrPut(p) { AppUsage(next = rule.initialMs) }
             if (u.next == 0L) u.next = rule.initialMs
             if (!state.on) { rollover(u, date(now.wall, zone)); return@forEach }
@@ -99,21 +126,33 @@ class FocusEngine(val state: FocusState, private val excluded: Set<String> = emp
                         .atStartOfDay(zone).toInstant().toEpochMilli()
                     val before = (midnight - old.wall).coerceIn(0, delta)
                     rollover(u, date(old.wall, zone))
-                    advance(u, rule, before, overlayVisible, ordinaryVisible)
+                    advance(u, rule, before, overlayVisible, ordinaryVisible, old)
                     rollover(u, date(now.wall, zone))
-                    advance(u, rule, delta - before, overlayVisible, ordinaryVisible)
+                    advance(u, rule, delta - before, overlayVisible, ordinaryVisible,
+                        old.copy(elapsed = old.elapsed + before))
                 } else {
                     rollover(u, date(now.wall, zone))
-                    advance(u, rule, delta, overlayVisible, ordinaryVisible)
+                    advance(u, rule, delta, overlayVisible, ordinaryVisible, old ?: now)
                 }
             }
+            expireWrapUp(u, now)
         }
         // Daily totals remain calendar based even for apps subsequently changed to Allowed/Blocked.
         state.usage.values.forEach { rollover(it, date(now.wall, zone)) }
         previous = now; previousPackage = target; previousOverlay = overlayVisible; previousZone = zone.id; previousOrdinary = ordinaryVisible
         state.checkpoint = now
     }
-    private fun advance(u: AppUsage, r: AppRule, delta: Long, overlay: Boolean, ordinary: Boolean) {
+    private fun advance(u: AppUsage, r: AppRule, delta: Long, overlay: Boolean, ordinary: Boolean, from: Stamp) {
+        val started = u.wrapUpStarted
+        if (started != null) {
+            // Keep the original pause pending; time spent wrapping up still counts toward daily use.
+            if (!overlay && r.policy == Policy.Interrupted && started.boot == from.boot) {
+                val charged = minOf(delta, (60_000 - (from.elapsed - started.elapsed)).coerceIn(0, 60_000))
+                u.used += charged; u.daily += charged
+            }
+            return
+        }
+        if (r.policy != Policy.Interrupted) return
         if (r.capMs != null && u.daily >= r.capMs) return
         if (u.remaining > 0) {
             if (ordinary) {
